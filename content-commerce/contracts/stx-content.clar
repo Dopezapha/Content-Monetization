@@ -55,9 +55,9 @@
     )
 )
 
-(define-private (execute-stx-transfer (transfer-amount uint) (recipient-address principal))
-    (try! (stx-transfer? transfer-amount tx-sender recipient-address))
-    (ok true)
+;; Fixed execute-stx-transfer function to match stx-transfer? expectations
+(define-private (execute-stx-transfer (amount uint) (recipient principal))
+    (stx-transfer? amount tx-sender recipient)
 )
 
 (define-private (verify-subscription-status (subscriber-address principal) (digital-content-id uint))
@@ -71,8 +71,12 @@
 )
 
 ;; Public functions
-(define-public (register-digital-content (digital-content-id uint) (content-price-stx uint) (creator-revenue-percentage uint) 
-                                       (content-metadata-uri (string-utf8 256)) (subscription-enabled bool) (subscription-period-blocks uint))
+(define-public (register-digital-content (digital-content-id uint) 
+                                       (content-price-stx uint) 
+                                       (creator-revenue-percentage uint) 
+                                       (content-metadata-uri (string-utf8 256)) 
+                                       (subscription-enabled bool) 
+                                       (subscription-period-blocks uint))
     (begin
         (asserts! (> content-price-stx u0) ERR-INVALID-PRICING-PARAMETERS)
         (asserts! (and (>= creator-revenue-percentage u0) (<= creator-revenue-percentage u1000)) ERR-INVALID-PRICING-PARAMETERS)
@@ -104,8 +108,8 @@
         
         (asserts! (not (verify-subscription-status tx-sender digital-content-id)) ERR-DUPLICATE-PURCHASE)
         
-        ;; Process payment
-        (try! (stx-transfer? (get content-price-stx content-details) tx-sender (as-contract tx-sender)))
+        ;; Process payment using updated transfer function
+        (try! (execute-stx-transfer (get content-price-stx content-details) (as-contract tx-sender)))
         
         ;; Update creator earnings
         (map-set creator-earnings-ledger
@@ -148,7 +152,8 @@
             { available-balance: u0 }
         )
         
-        (try! (as-contract (stx-transfer? withdrawal-amount tx-sender tx-sender)))
+        ;; Use updated transfer function
+        (try! (execute-stx-transfer withdrawal-amount tx-sender))
         (ok true)
     )
 )
