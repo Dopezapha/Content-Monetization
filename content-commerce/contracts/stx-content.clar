@@ -10,6 +10,9 @@
 (define-constant ERR-INSUFFICIENT-STX-BALANCE (err u5))
 (define-constant ERR-SUBSCRIPTION-EXPIRED (err u6))
 (define-constant ERR-INVALID-SUBSCRIPTION-DURATION (err u7))
+(define-constant ERR-INVALID-CONTENT-ID (err u8))
+(define-constant ERR-INVALID-METADATA-URI (err u9))
+(define-constant ERR-INVALID-ADMINISTRATOR (err u10))
 
 ;; Data variables
 (define-data-var platform-administrator principal tx-sender)
@@ -55,7 +58,6 @@
     )
 )
 
-;; Fixed execute-stx-transfer function to match stx-transfer? expectations
 (define-private (execute-stx-transfer (amount uint) (recipient principal))
     (stx-transfer? amount tx-sender recipient)
 )
@@ -78,8 +80,10 @@
                                        (subscription-enabled bool) 
                                        (subscription-period-blocks uint))
     (begin
+        (asserts! (> digital-content-id u0) ERR-INVALID-CONTENT-ID)
         (asserts! (> content-price-stx u0) ERR-INVALID-PRICING-PARAMETERS)
         (asserts! (and (>= creator-revenue-percentage u0) (<= creator-revenue-percentage u1000)) ERR-INVALID-PRICING-PARAMETERS)
+        (asserts! (> (len content-metadata-uri) u0) ERR-INVALID-METADATA-URI)
         (asserts! (or (not subscription-enabled) (> subscription-period-blocks u0)) ERR-INVALID-SUBSCRIPTION-DURATION)
         
         (map-set digital-content-registry
@@ -106,6 +110,7 @@
             (current-block-height block-height)
         )
         
+        (asserts! (> digital-content-id u0) ERR-INVALID-CONTENT-ID)
         (asserts! (not (verify-subscription-status tx-sender digital-content-id)) ERR-DUPLICATE-PURCHASE)
         
         ;; Process payment using updated transfer function
@@ -165,6 +170,7 @@
                 { content-buyer: tx-sender, digital-content-id: digital-content-id }) ERR-CONTENT-NOT-FOUND))
         )
         
+        (asserts! (> digital-content-id u0) ERR-INVALID-CONTENT-ID)
         (asserts! (get purchase-status-active subscription-record) ERR-CONTENT-NOT-FOUND)
         
         (map-set user-content-purchases
@@ -193,9 +199,12 @@
 )
 
 (define-read-only (verify-content-access (content-buyer principal) (digital-content-id uint))
-    (match (map-get? user-content-purchases { content-buyer: content-buyer, digital-content-id: digital-content-id })
-        purchase-record (ok (verify-subscription-status content-buyer digital-content-id))
-        ERR-CONTENT-NOT-FOUND
+    (begin
+        (asserts! (> digital-content-id u0) ERR-INVALID-CONTENT-ID)
+        (match (map-get? user-content-purchases { content-buyer: content-buyer, digital-content-id: digital-content-id })
+            purchase-record (ok (verify-subscription-status content-buyer digital-content-id))
+            ERR-CONTENT-NOT-FOUND
+        )
     )
 )
 
@@ -212,6 +221,8 @@
 (define-public (transfer-platform-administration (new-administrator principal))
     (begin
         (asserts! (is-eq tx-sender (var-get platform-administrator)) ERR-UNAUTHORIZED-ACCESS)
+        ;; We can simply check that the new administrator is not the zero address
+        (asserts! (not (is-eq new-administrator 'SP000000000000000000002Q6VF78)) ERR-INVALID-ADMINISTRATOR)
         (var-set platform-administrator new-administrator)
         (ok true)
     )
